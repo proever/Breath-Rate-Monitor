@@ -26,7 +26,7 @@ from serial_worker import SerialWorker
 # begin wxGlade: extracode
 # end wxGlade
 
-EVT_LIVE_DATA_RESULT = wx.NewId()
+EVT_CALIBRATION_DATA_RESULT = wx.NewId()
 
 def bind_EVT(win, func, EVT_ID):
     """Define Result Event."""
@@ -47,7 +47,15 @@ class SerialThread(Thread):
     def __init__(self, wxObject, port, lowerLim, upperLim, blockSize, blocks, baud=4800):
         """Init Worker Thread Class."""
         Thread.__init__(self)
-        self.serialWorker = SerialWorker(port, lowerLim, upperLim, blockSize, blocks, baud)
+
+        self.port = port
+        self.baud = baud
+        self.lowerLim = lowerLim
+        self.upperLim = upperLim
+        self.blockSize = blockSize
+        self.blocks = blocks
+
+        self.serialWorker = SerialWorker()
         self.wxObject = wxObject
         self.daemon = True
         self.start()    # start the thread
@@ -56,7 +64,7 @@ class SerialThread(Thread):
     def run(self):
         """Run Worker Thread."""
         # This is the code executing in the new thread.
-        self.serialWorker.live_data(EVT_LIVE_DATA_RESULT, wx.PostEvent, ResultEvent, self.wxObject)
+        self.serialWorker.calibrate(EVT_CALIBRATION_DATA_RESULT, wx.PostEvent, ResultEvent, self.wxObject, self.port, self.blockSize, self. blocks, self.baud)
 
 
 class BreathRateMonitorWindow(wx.Frame):
@@ -111,7 +119,7 @@ class BreathRateMonitorWindow(wx.Frame):
         self.upperThreshold_spinDouble.SetIncrement(0.01)
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
-        bind_EVT(self, self.live_plot, EVT_LIVE_DATA_RESULT)
+        bind_EVT(self, self.live_plot, EVT_CALIBRATION_DATA_RESULT)
 
     def __set_properties(self):
         # begin wxGlade: BreathRateMonitorWindow.__set_properties
@@ -194,7 +202,12 @@ class BreathRateMonitorWindow(wx.Frame):
 
     def start_plot(self, event):
         self.fig = plt.figure()
+        self.fig.canvas.mpl_connect('close_event', self.handle_fig_close)
         plt.plot(np.zeros(100*10))
+
+    def handle_fig_close(self, event):
+        self.stop_serialThread(event)
+        print ('Closed Figure')
 
     def live_plot(self, event):
         if plt.get_fignums():
@@ -211,7 +224,12 @@ class BreathRateMonitorWindow(wx.Frame):
             wx.MessageBox('Starting calibration...', 'Info', wx.OK | wx.ICON_INFORMATION)
             self.start_plot(event)
 
+        elif self.serialThread.isAlive():
+            #TODO: bring window to foreground?
+            pass
+
         else:
+            self.begin_live_data_gen(event)
             wx.MessageBox('Starting calibration...', 'Info', wx.OK | wx.ICON_INFORMATION)
             self.start_plot(event)
 
@@ -254,8 +272,9 @@ class BreathRateMonitorWindow(wx.Frame):
         self.Destroy()
 
     def stop_serialThread(self, event):
-        if self.serialThread != None:
+        if self.serialThread != None and self.serialThread.isAlive():
             self.serialThread.serialWorker.stop()
+            print("Terminated Thread")
 
     def noPortMsg(self):
         wx.MessageBox('Please select a port', 'Error',

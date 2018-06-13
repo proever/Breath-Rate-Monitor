@@ -4,20 +4,16 @@ import time
 
 class SerialWorker:
 
-    def __init__(self, port, lowerLim, upperLim, blockSize, blocks, baud):
-        print('reading from serial port %s at %d baud...' % (port, baud))
-
-        self.ser = self.serial_setup(port, lowerLim, upperLim, baud)
+    def __init__(self):
         self.zsize = 16384
-        self.blockSize = blockSize
-        self.blocks = blocks
-        self.data = np.zeros((self.blocks, self.blockSize))
-        self.publish_live_data = True
+        self.calibration_running = False
 
     def set_publish_live_data(self, publish_bool):
-        self.publish_live_data = publish_bool
+        self.calibration_running = publish_bool
 
-    def serial_setup(self, port, lowerLim, upperLim, baud):
+    def serial_setup(self, port, baud):
+        print('reading from serial port %s at %d baud...' % (port, baud))
+
         time.sleep(1)
 
         ser = serial.Serial(port, baud)
@@ -28,18 +24,20 @@ class SerialWorker:
 
         return ser
 
-    def live_data(self, EVT_ID, PostEvent, ResultEvent, wxObject):
-        self.ser.flushInput()
-        # Incase flush leaves half a serial value
-        self.ser.readline()
+    def calibrate(self, EVT_ID, PostEvent, ResultEvent, wxObject, port, blockSize, blocks, baud):
+        self.ser = self.serial_setup(port, baud)
+        self.calibration_running = True
+        self.data = np.zeros((blocks, blockSize))
+
+        time_till = time.time() + 60
 
         loop_count = 0
-        while self.publish_live_data:
-            if loop_count == self.blocks:
+        while self.calibration_running and time.time() < time_till:
+            if loop_count == blocks:
                 loop_count = 0
 
-            nums = np.zeros((self.blockSize))
-            for i in range(self.blockSize):
+            nums = np.zeros((blockSize))
+            for i in range(blockSize):
 
                 line = self.ser.readline()
                 line = line.decode("utf-8")
@@ -60,4 +58,4 @@ class SerialWorker:
         self.ser.close()
 
     def stop(self):
-        self.publish_live_data = False
+        self.calibration_running = False

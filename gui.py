@@ -1,4 +1,3 @@
-#TODO: force folder choice here
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 #
@@ -143,7 +142,7 @@ class BreathRateMonitorWindow(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.calibrate, self.calibrate_btn)
         self.Bind(wx.EVT_CHECKBOX, self.update_filename, self.saveToFolder_checkbox)
         self.Bind(wx.EVT_BUTTON, self.folder_picker, self.chooseFolder_btn)
-        self.Bind(wx.EVT_BUTTON, self.startImaging, self.start_btn)
+        self.Bind(wx.EVT_BUTTON, self.start_imaging, self.start_btn)
         self.Bind(wx.EVT_BUTTON, self.quit, self.quit_btn)
         # end wxGlade
 
@@ -272,21 +271,21 @@ class BreathRateMonitorWindow(wx.Frame):
         if plt.get_fignums():
             loop_count = event.data[0]
             time_array = event.data[1]
-            Breathing_rate_array = event.data[2]
+            breathing_rate_array = event.data[2]
 
             if loop_count > 40:
                 ax = plt.gca()
                 ax.set_xlim([0.25*(loop_count-40),0.25*loop_count])
 
             self.calculation_line.set_xdata(time_array)
-            self.calculation_line.set_ydata(Breathing_rate_array)
+            self.calculation_line.set_ydata(breathing_rate_array)
 
             self.calculation_fig.canvas.draw()
 
             if self.saveToFolder_checkbox.GetValue() and self.path != None:
                 if self.f != None:
                     st = datetime.datetime.now().strftime('%H:%M:%S')
-                    line = st + "," + str(Breathing_rate_array[-1]) + "\n"
+                    line = st + "," + str(breathing_rate_array[-1]) + "\n"
                     self.f.write(line)
 
     def update_calibration_plot(self, event):
@@ -348,7 +347,7 @@ class BreathRateMonitorWindow(wx.Frame):
         self.calculationThread = CalculationThread(self, self.port, self.lowerLim, self.upperLim, self.view_time, self.yrange)
         self.start_calculation_plot(event)
 
-    def startImaging(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
+    def start_imaging(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         if self.port == None:
             self.noPortMsg()
 

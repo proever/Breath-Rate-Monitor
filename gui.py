@@ -1,3 +1,4 @@
+#TODO: force folder choice here
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 #
@@ -26,7 +27,8 @@ from serial_worker import SerialWorker
 # begin wxGlade: extracode
 # end wxGlade
 
-EVT_CALIBRATION_DATA_RESULT = wx.NewId()
+EVT_CALCULATION_PUBLISHED = wx.NewId()
+EVT_CALIBRATION_DATA_PUBLISHED = wx.NewId()
 
 def bind_EVT(win, func, EVT_ID):
     """Define Result Event."""
@@ -40,11 +42,11 @@ class ResultEvent(wx.PyEvent):
         self.SetEventType(EVT_ID)
         self.data = data
 
-class SerialThread(Thread):
+class CalculationThread(Thread):
     """Test Worker Thread Class."""
 
     #----------------------------------------------------------------------
-    def __init__(self, wxObject, port, lowerLim, upperLim, blockSize, blocks, baud=4800):
+    def __init__(self, wxObject, port, lowerLim, upperLim, view_time, yrange, baud=4800):
         """Init Worker Thread Class."""
         Thread.__init__(self)
 
@@ -52,6 +54,30 @@ class SerialThread(Thread):
         self.baud = baud
         self.lowerLim = lowerLim
         self.upperLim = upperLim
+        self.view_time = view_time
+        self.yrange = yrange
+
+        self.serialWorker = SerialWorker()
+        self.wxObject = wxObject
+        self.daemon = True
+        self.start()    # start the thread
+
+    #----------------------------------------------------------------------
+    def run(self):
+        """Run Worker Thread."""
+        # This is the code executing in the new thread.
+        self.serialWorker.calculate_BR(EVT_CALCULATION_PUBLISHED, wx.PostEvent, ResultEvent, self.wxObject, self.port, self.baud, self.lowerLim, self.upperLim, self.view_time, self.yrange)
+
+class CalibrationThread(Thread):
+    """Test Worker Thread Class."""
+
+    #----------------------------------------------------------------------
+    def __init__(self, wxObject, port, blockSize, blocks, baud=4800):
+        """Init Worker Thread Class."""
+        Thread.__init__(self)
+
+        self.port = port
+        self.baud = baud
         self.blockSize = blockSize
         self.blocks = blocks
 
@@ -64,22 +90,27 @@ class SerialThread(Thread):
     def run(self):
         """Run Worker Thread."""
         # This is the code executing in the new thread.
-        self.serialWorker.calibrate(EVT_CALIBRATION_DATA_RESULT, wx.PostEvent, ResultEvent, self.wxObject, self.port, self.blockSize, self. blocks, self.baud)
+        self.serialWorker.calibrate(EVT_CALIBRATION_DATA_PUBLISHED, wx.PostEvent, ResultEvent, self.wxObject, self.port, self.baud, self.blockSize, self.blocks)
 
 
 class BreathRateMonitorWindow(wx.Frame):
     def __init__(self, *args, **kwds):
         # begin wxGlade: BreathRateMonitorWindow.__init__
         self.port = None
-        self.serialThread = None
+        self.calibrationThread = None
+        self.calculationThread = None
 
         self.lowerLim = 0.75
         self.upperLim = 1.25
         self.blockSize = 10
         self.blocks = 100
+        self.view_time = 10 # minutes
+        self.yrange = [-0.1, 1.5]
 
         self.path = None
         self.filename = None
+
+        self.f = None
 
         plt.ion()
 
@@ -110,6 +141,7 @@ class BreathRateMonitorWindow(wx.Frame):
         self.Bind(wx.EVT_CHOICE, self.update_port, self.port_choice)
         self.Bind(wx.EVT_BUTTON, self.build, self.build_btn)
         self.Bind(wx.EVT_BUTTON, self.calibrate, self.calibrate_btn)
+        self.Bind(wx.EVT_CHECKBOX, self.update_filename, self.saveToFolder_checkbox)
         self.Bind(wx.EVT_BUTTON, self.folder_picker, self.chooseFolder_btn)
         self.Bind(wx.EVT_BUTTON, self.startImaging, self.start_btn)
         self.Bind(wx.EVT_BUTTON, self.quit, self.quit_btn)
@@ -119,7 +151,8 @@ class BreathRateMonitorWindow(wx.Frame):
         self.upperThreshold_spinDouble.SetIncrement(0.01)
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
-        bind_EVT(self, self.live_plot, EVT_CALIBRATION_DATA_RESULT)
+        bind_EVT(self, self.update_calibration_plot, EVT_CALIBRATION_DATA_PUBLISHED)
+        bind_EVT(self, self.update_calculation_plot, EVT_CALCULATION_PUBLISHED)
 
     def __set_properties(self):
         # begin wxGlade: BreathRateMonitorWindow.__set_properties
@@ -187,29 +220,76 @@ class BreathRateMonitorWindow(wx.Frame):
         portIndex = self.port_choice.GetSelection()
         self.port = self.port_choice.GetString(portIndex)
 
+    def update_filename(self, event):
+        if self.saveToFolder_checkbox.GetValue() and self.path == None:
+            self.folder_picker(event)
+
     def build(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         if self.port == None:
             self.noPortMsg()
         else:
+            #TODO: turn this and others into confirm/cancel box with consequences
             wx.MessageBox('Flashing board, please wait', 'Info', wx.OK | wx.ICON_INFORMATION)
             res = flash_arduino.main(self.port)
-            self.begin_live_data_gen(event)
+            print("Done")
 
-    def begin_live_data_gen(self, event):
-        wx.MessageBox('Data generation started', 'Info',
-                wx.OK | wx.ICON_INFORMATION)
-        self.serialThread = SerialThread(self, self.port, self.lowerLim, self.upperLim, self.blockSize, self.blocks)
+    # def begin_live_data_gen(self, event):
+    #     wx.MessageBox('Data generation started', 'Info',
+    #             wx.OK | wx.ICON_INFORMATION)
+    #     self.calibrationThread = CalibrationThread(self, self.port, self.lowerLim, self.upperLim, self.blockSize, self.blocks)
 
-    def start_plot(self, event):
-        self.fig = plt.figure()
-        self.fig.canvas.mpl_connect('close_event', self.handle_fig_close)
+    def start_calculation_plot(self, event):
+        self.calculation_fig = plt.figure()
+        self.calculation_fig.canvas.mpl_connect('close_event', self.handle_fig_close)
+        self.calculation_fig.patch.set_facecolor((0.05,0.05,0.05))
+        self.calculation_fig.suptitle('Breathing rate data',fontsize = '18', fontweight = 'bold',color = 'white')
+        plt.xlabel('time, mins', fontsize='14', fontstyle='italic',color = 'white')
+        plt.gca().grid(True)
+        self.calculation_line, = plt.plot([],marker='o',markersize=4,markerfacecolor='red')
+        plt.ylim(self.yrange)
+        plt.xlim([0, self.view_time])
+        ax = plt.gca()
+        ax.set_facecolor((0.1,0.1,0.1))
+        ax.tick_params(axis='x', colors='white')
+        ax.tick_params(axis='y', colors='white')
+
+    def start_calibration_plot(self, event):
+        self.calibration_fig = plt.figure()
+        self.calibration_fig.canvas.mpl_connect('close_event', self.handle_fig_close)
         plt.plot(np.zeros(100*10))
 
     def handle_fig_close(self, event):
         self.stop_serialThread(event)
         print ('Closed Figure')
 
-    def live_plot(self, event):
+        #update filename to create new file on next session
+        if self.saveToFolder_checkbox.GetValue() and self.path != None:
+            st = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+            self.filename = "FILM_session_" + st + ".csv"
+            self.folderPath_field.write(os.path.join(self.path, self.filename))
+
+    def update_calculation_plot(self, event):
+        if plt.get_fignums():
+            loop_count = event.data[0]
+            time_array = event.data[1]
+            Breathing_rate_array = event.data[2]
+
+            if loop_count > 40:
+                ax = plt.gca()
+                ax.set_xlim([0.25*(loop_count-40),0.25*loop_count])
+
+            self.calculation_line.set_xdata(time_array)
+            self.calculation_line.set_ydata(Breathing_rate_array)
+
+            self.calculation_fig.canvas.draw()
+
+            if self.saveToFolder_checkbox.GetValue() and self.path != None:
+                if self.f != None:
+                    st = datetime.datetime.now().strftime('%H:%M:%S')
+                    line = st + "," + str(Breathing_rate_array[-1]) + "\n"
+                    self.f.write(line)
+
+    def update_calibration_plot(self, event):
         if plt.get_fignums():
             nums = np.reshape(event.data,(100*10))
             plt.cla()
@@ -219,25 +299,28 @@ class BreathRateMonitorWindow(wx.Frame):
         if self.port == None:
             self.noPortMsg()
 
-        elif self.serialThread == None:
-            self.begin_live_data_gen(event)
-            wx.MessageBox('Starting calibration...', 'Info', wx.OK | wx.ICON_INFORMATION)
-            self.start_plot(event)
+        elif self.calculationThread != None and self.calculationThread.isAlive():
+            wx.MessageBox('BR calculation is in progress, please close that window before calibrating', 'Error', wx.OK | wx.ICON_INFORMATION)
 
-        elif self.serialThread.isAlive():
+        elif self.calibrationThread == None:
+            wx.MessageBox('Starting calibration...', 'Info', wx.OK | wx.ICON_INFORMATION)
+            self.calibrationThread = CalibrationThread(self, self.port, self.blockSize, self.blocks)
+            self.start_calibration_plot(event)
+
+        elif self.calibrationThread.isAlive():
             #TODO: bring window to foreground?
             pass
 
         else:
-            self.begin_live_data_gen(event)
             wx.MessageBox('Starting calibration...', 'Info', wx.OK | wx.ICON_INFORMATION)
-            self.start_plot(event)
+            self.calibrationThread = CalibrationThread(self, self.port, self.blockSize, self.blocks)
+            self.start_calibration_plot(event)
 
     def folder_picker(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         self.saveToFolder_checkbox.SetValue(True)
         self.folderPath_field.Clear()
-        st = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M')
-        self.filename = "session_" + st + ".txt"
+        st = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+        self.filename = "FILM_session_" + st + ".csv"
 
         folder_dlg = wx.DirDialog(None, "Choose a folder", "",
                 wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
@@ -253,14 +336,34 @@ class BreathRateMonitorWindow(wx.Frame):
         finally:
             folder_dlg.Destroy()
 
+    def check_fp_and_start_threads(self, event):
+        #TODO: force folder choice here
+        if self.saveToFolder_checkbox.GetValue() and self.path == None:
+            self.folder_picker(event)
+
+        filepath = os.path.join(self.path, self.filename)
+        self.f = open(filepath, "w")
+
+        wx.MessageBox('Starting calculation...', 'Info', wx.OK | wx.ICON_INFORMATION)
+        self.calculationThread = CalculationThread(self, self.port, self.lowerLim, self.upperLim, self.view_time, self.yrange)
+        self.start_calculation_plot(event)
+
     def startImaging(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         if self.port == None:
             self.noPortMsg()
 
-        else:
-            wx.MessageBox('Starting imaging session...', 'Info', wx.OK | wx.ICON_INFORMATION)
-            LEDGUI.main(self.port, self.lowerThreshold_spinDouble.GetValue(), self.upperThreshold_spinDouble.GetValue())
+        elif self.calibrationThread != None and self.calibrationThread.isAlive():
+            wx.MessageBox('BR calibration is in progress, please close that window before starting the calculation', 'Error', wx.OK | wx.ICON_INFORMATION)
 
+        elif self.calculationThread == None:
+            self.check_fp_and_start_threads(event)
+
+        elif self.calculationThread.isAlive():
+            #TODO: bring window to foreground?
+            pass
+
+        else:
+            self.check_fp_and_start_threads(event)
 
     def quit(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         self.on_close(event)
@@ -268,13 +371,22 @@ class BreathRateMonitorWindow(wx.Frame):
     def on_close(self, event):
         plt.close("all")
         self.stop_serialThread(event)
+
         time.sleep(0.5)
+
+        if self.f != None:
+            self.f.close()
+
         self.Destroy()
 
     def stop_serialThread(self, event):
-        if self.serialThread != None and self.serialThread.isAlive():
-            self.serialThread.serialWorker.stop()
-            print("Terminated Thread")
+        if self.calculationThread != None and self.calculationThread.isAlive():
+            self.calculationThread.serialWorker.stop()
+            print("Terminated Calculation Thread")
+
+        if self.calibrationThread != None and self.calibrationThread.isAlive():
+            self.calibrationThread.serialWorker.stop()
+            print("Terminated Calibration Thread")
 
     def noPortMsg(self):
         wx.MessageBox('Please select a port', 'Error',

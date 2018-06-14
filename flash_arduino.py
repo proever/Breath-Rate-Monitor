@@ -6,16 +6,20 @@ def main(port):
     if platform == "win32":
         print("on Windows, proceeding...")
 
-        # TODO: revert to . not ..
-        exe_fp = os.path.join("..", "arduino-1.8.5", "arduino_debug.exe")
+        exe_fp = os.path.join(".", "arduino-1.8.5", "arduino_debug.exe")
+        if not os.path.exists(exe_fp):
+            exe_fp = os.path.join("..", "arduino-1.8.5", "arduino_debug.exe")
+            if not os.path.exists(exe_fp):
+                return 1
+
         board = "arduino:avr:uno"
         sketch_fp = os.path.join(".", "arduino_code", "serial_interface.ino")
 
-        arg = exe_fp + " --board " + board + " --port " + port + " --upload " + sketch_fp
+        command = exe_fp + " --board " + board + " --port " + port + " --upload " + sketch_fp
 
-        print(arg)
+        print(command)
 
-        return check_output(arg)
+        return check_output(command)
 
     else:
         print("error, on " + platform + ", not Windows")

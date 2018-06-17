@@ -140,10 +140,6 @@ class SerialWorker:
 
             loop_count = loop_count + 1
 
-            if loop_count > 40:
-                plt.xlim([0.25*(loop_count-40),0.25*loop_count])
-
-
             if breathing_rate > lowerLim and breathing_rate < upperLim and LED_state != 'Green':
                 LED_state = 'Green'
                 ser.write(LED_state.encode())

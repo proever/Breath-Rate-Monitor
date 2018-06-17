@@ -1,6 +1,7 @@
 import serial
 import numpy as np
 import time
+import datetime
 
 class SerialWorker:
 
@@ -69,7 +70,7 @@ class SerialWorker:
         zdata = []
         zsize = 16384
 
-        Breathing_rate_array = []
+        breathing_rate_array = []
         time_array = []
 
         loop_count = 0
@@ -97,7 +98,6 @@ class SerialWorker:
             interval_start = time.time()
             # size before padding
             zsize_init = len(zdata)
-            print(zsize_init)
             # pad width
             pad_width = 16384 - zsize_init
             #determine sampling frequency
@@ -131,10 +131,13 @@ class SerialWorker:
 
             # determine breathing rate
             breathing_rate = delta_f * peakindex
+
+            st = datetime.datetime.now().strftime('%H:%M:%S')
+            print(st)
             print(breathing_rate)
-            print(time.time())
+
             # append to breathing rate array
-            Breathing_rate_array.append(breathing_rate)
+            breathing_rate_array.append(breathing_rate)
 
             time_array.append(0.25*loop_count)
 
@@ -152,7 +155,7 @@ class SerialWorker:
                 LED_state = 'High'
                 ser.write(LED_state.encode())
 
-            data = (loop_count, time_array, Breathing_rate_array)
+            data = (loop_count, time_array, breathing_rate_array)
             PostEvent(wxObject, ResultEvent(data, EVT_CALCULATION_PUBLISHED))
 
     def stop(self):

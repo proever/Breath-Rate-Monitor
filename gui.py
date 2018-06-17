@@ -99,8 +99,8 @@ class BreathRateMonitorWindow(wx.Frame):
         self.calibrationThread = None
         self.calculationThread = None
 
-        self.lowerLim = 0.75
-        self.upperLim = 1.25
+        self.lowerLim = 0.6
+        self.upperLim = 1.4
         self.blockSize = 10
         self.blocks = 100
         self.view_time = 10 # minutes
@@ -140,6 +140,8 @@ class BreathRateMonitorWindow(wx.Frame):
         self.Bind(wx.EVT_CHOICE, self.update_port, self.port_choice)
         self.Bind(wx.EVT_BUTTON, self.build, self.build_btn)
         self.Bind(wx.EVT_BUTTON, self.calibrate, self.calibrate_btn)
+        self.Bind(wx.EVT_SPINCTRLDOUBLE, self.update_thresholds, self.lowerThreshold_spinDouble)
+        self.Bind(wx.EVT_SPINCTRLDOUBLE, self.update_thresholds, self.upperThreshold_spinDouble)
         self.Bind(wx.EVT_CHECKBOX, self.update_filename, self.saveToFolder_checkbox)
         self.Bind(wx.EVT_BUTTON, self.folder_picker, self.chooseFolder_btn)
         self.Bind(wx.EVT_BUTTON, self.start_imaging, self.start_btn)
@@ -218,6 +220,10 @@ class BreathRateMonitorWindow(wx.Frame):
     def update_port(self, event):  # wxGlade: BreathRateMonitorWindow.<event_handler>
         portIndex = self.port_choice.GetSelection()
         self.port = self.port_choice.GetString(portIndex)
+
+    def update_thresholds(self, event):
+        self.lowerLim = self.lowerThreshold_spinDouble.GetValue()
+        self.upperLim = self.upperThreshold_spinDouble.GetValue()
 
     def update_filename(self, event):
         if self.saveToFolder_checkbox.GetValue() and self.path == None:

@@ -10,9 +10,7 @@ Folder hierarchy should look as follows:
 ```
 \ --- Breath-Rate-Monitor
       |
-      |
       \ --- dist
-            |
             |
             \ --- gui
                   |
@@ -36,3 +34,4 @@ Folder hierarchy should look as follows:
 - select the folder to save the logs in (files are automatically called FILM_session_{year}-{month}-{day}_{hour}-{minute}.csv)
 - select Start Imaging to open the live view of the estimated breathing rate (it will take one minute initially to generate an estimate)
 - close the live view when you have finished the imaging session, this also saves the generated data (it will not be available before this time)
+
